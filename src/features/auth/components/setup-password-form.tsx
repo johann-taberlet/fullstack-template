@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { authClient } from "@/features/auth/client";
 
 export function SetupPasswordForm() {
   const router = useRouter();
@@ -27,12 +26,16 @@ export function SetupPasswordForm() {
 
     setLoading(true);
 
-    const result = await authClient.changePassword({
-      newPassword: password,
+    const res = await fetch("/api/auth/set-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newPassword: password }),
+      credentials: "include",
     });
 
-    if (result.error) {
-      setError(result.error.message ?? "Erreur lors de la mise à jour");
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setError(data?.message ?? "Erreur lors de la mise à jour");
       setLoading(false);
       return;
     }
