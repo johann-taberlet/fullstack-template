@@ -12,6 +12,76 @@
 
 ---
 
+## Stratégie de parallélisation (Worktrees)
+
+Ce plan est découpé en 3 blocs pour permettre l'exécution parallèle via git worktrees.
+
+```
+Bloc 1: TRUNK (séquentiel sur main) ── Tasks 1-8
+    │
+    │  Brancher les 4 worktrees depuis la fin du Bloc 1
+    │
+    ├── Worktree A: feature/clients ──────── Tasks 9-10
+    ├── Worktree B: feature/projects-tasks ─ Tasks 11-14
+    ├── Worktree C: feature/time-comments ── Tasks 15-18
+    └── Worktree D: feature/invoices ─────── Tasks 19-21
+    │
+    │  Merger toutes les branches dans main (--no-ff)
+    │
+Bloc 3: INTÉGRATION (séquentiel sur main) ── Tasks 22-27
+```
+
+### Lancement des sessions parallèles
+
+Après avoir terminé le Bloc 1 (trunk), ouvrir 4 sessions Claude Code :
+
+```bash
+# Session A — Clients
+git worktree add ../joki-clients feature/clients
+cd ../joki-clients
+# → /superpowers:executing-plans docs/plans/2026-04-10-joki-implementation-plan.md
+# → Exécuter uniquement les Tasks 9-10
+
+# Session B — Projects + Tasks
+git worktree add ../joki-projects feature/projects-tasks
+cd ../joki-projects
+# → Exécuter uniquement les Tasks 11-14
+
+# Session C — Time Tracking + Comments
+git worktree add ../joki-time feature/time-comments
+cd ../joki-time
+# → Exécuter uniquement les Tasks 15-18
+
+# Session D — Invoices + PDF
+git worktree add ../joki-invoices feature/invoices
+cd ../joki-invoices
+# → Exécuter uniquement les Tasks 19-21
+```
+
+### Merge après Bloc 2
+
+```bash
+cd /Users/jo/dev/perso/joki
+git merge --no-ff feature/clients
+git merge --no-ff feature/projects-tasks
+git merge --no-ff feature/time-comments
+git merge --no-ff feature/invoices
+```
+
+Puis continuer avec le Bloc 3 (Tasks 22-27) sur main.
+
+### Pourquoi ça marche sans conflits
+
+- Le schéma Prisma complet est défini dans le trunk (Task 2) — aucun worktree ne le modifie
+- Chaque feature crée ses fichiers dans des répertoires distincts (`src/features/<name>/`)
+- Le layout projet (`projects/[slug]/layout.tsx`) avec TOUS les onglets est créé par Worktree B
+- Les autres worktrees ajoutent uniquement des `page.tsx` dans des sous-dossiers (fichiers nouveaux)
+- L'intégration cross-feature (commentaires dans les vues tâche, notifications) est reportée au Bloc 3
+
+---
+
+## BLOC 1 — TRUNK (séquentiel sur main)
+
 ## Phase 1: Foundation — Database & Shared Infrastructure
 
 ### Task 1: Installer les dépendances
@@ -708,6 +778,13 @@ git commit -m "feat: add dashboard layout with sidebar and header"
 
 ---
 
+## BLOC 2 — FEATURES PARALLÈLES (4 worktrees)
+
+> **Pour Claude:** Chaque worktree exécute son sous-ensemble de tâches indépendamment.
+> Brancher depuis la fin du Bloc 1. Ne pas modifier de fichiers hors de la feature assignée.
+
+### WORKTREE A: `feature/clients` — Tasks 9-10
+
 ## Phase 4: Clients Feature
 
 ### Task 9: Service et API Clients
@@ -876,6 +953,8 @@ git commit -m "feat: add clients UI (list and form)"
 ```
 
 ---
+
+### WORKTREE B: `feature/projects-tasks` — Tasks 11-14
 
 ## Phase 5: Projects Feature
 
@@ -1063,6 +1142,8 @@ git commit -m "feat: add Kanban board UI with drag and drop"
 
 ---
 
+### WORKTREE C: `feature/time-comments` — Tasks 15-18
+
 ## Phase 7: Time Tracking Feature
 
 ### Task 15: Service et API Time Tracking
@@ -1205,6 +1286,8 @@ git commit -m "feat: add comments UI (list and form)"
 
 ---
 
+### WORKTREE D: `feature/invoices` — Tasks 19-21
+
 ## Phase 9: Invoices Feature
 
 ### Task 19: Service et API Invoices
@@ -1328,6 +1411,33 @@ git commit -m "feat: add PDF invoice generation with @react-pdf/renderer"
 ```
 
 ---
+
+## BLOC 3 — INTÉGRATION (séquentiel sur main, après merge des 4 worktrees)
+
+> **Pour Claude:** Exécuter après avoir mergé les 4 branches feature dans main avec `--no-ff`.
+> Ce bloc modifie des fichiers de PLUSIEURS features (cross-cutting concerns).
+
+### Étape de merge préalable
+
+```bash
+cd /Users/jo/dev/perso/joki
+git merge --no-ff feature/clients -m "Merge branch 'feature/clients'"
+git merge --no-ff feature/projects-tasks -m "Merge branch 'feature/projects-tasks'"
+git merge --no-ff feature/time-comments -m "Merge branch 'feature/time-comments'"
+git merge --no-ff feature/invoices -m "Merge branch 'feature/invoices'"
+
+# Nettoyage des worktrees
+git worktree remove ../joki-clients
+git worktree remove ../joki-projects
+git worktree remove ../joki-time
+git worktree remove ../joki-invoices
+```
+
+### Task 21.5: Intégration cross-feature
+
+Wiring des commentaires dans les vues existantes :
+- Ajouter la section commentaires dans le panneau de détail d'une tâche (modifier `src/features/tasks/components/`)
+- Ajouter les commentaires dans la page projet
 
 ## Phase 10: Notifications
 
@@ -1536,7 +1646,9 @@ git commit -m "feat: add Docker configuration and final cleanup"
 
 ---
 
-## Résumé des tâches
+## Résumé des tâches par bloc et worktree
+
+### Bloc 1 — Trunk (séquentiel sur main)
 
 | # | Tâche | Phase |
 |---|-------|-------|
@@ -1548,19 +1660,30 @@ git commit -m "feat: add Docker configuration and final cleanup"
 | 6 | Pages Login/Setup | Auth |
 | 7 | Middleware auth | Auth |
 | 8 | Layout Dashboard | Dashboard |
-| 9 | Service & API Clients | Clients |
-| 10 | UI Clients | Clients |
-| 11 | Service & API Projects | Projects |
-| 12 | UI Projects | Projects |
-| 13 | Service & API Tasks | Tasks |
-| 14 | UI Tasks (Kanban) | Tasks |
-| 15 | Service & API Time Tracking | Time |
-| 16 | UI Time Tracking | Time |
-| 17 | Service & API Comments | Comments |
-| 18 | UI Comments | Comments |
-| 19 | Service & API Invoices | Invoices |
-| 20 | UI Invoices | Invoices |
-| 21 | Génération PDF | Invoices |
+
+### Bloc 2 — Features parallèles (4 worktrees)
+
+| # | Tâche | Worktree | Branch |
+|---|-------|----------|--------|
+| 9 | Service & API Clients | A | `feature/clients` |
+| 10 | UI Clients | A | `feature/clients` |
+| 11 | Service & API Projects | B | `feature/projects-tasks` |
+| 12 | UI Projects | B | `feature/projects-tasks` |
+| 13 | Service & API Tasks | B | `feature/projects-tasks` |
+| 14 | UI Tasks (Kanban) | B | `feature/projects-tasks` |
+| 15 | Service & API Time Tracking | C | `feature/time-comments` |
+| 16 | UI Time Tracking | C | `feature/time-comments` |
+| 17 | Service & API Comments | C | `feature/time-comments` |
+| 18 | UI Comments (core) | C | `feature/time-comments` |
+| 19 | Service & API Invoices | D | `feature/invoices` |
+| 20 | UI Invoices | D | `feature/invoices` |
+| 21 | Génération PDF | D | `feature/invoices` |
+
+### Bloc 3 — Intégration (séquentiel sur main, après merge)
+
+| # | Tâche | Phase |
+|---|-------|-------|
+| 21.5 | Intégration cross-feature | Wiring |
 | 22 | Notifications & Emails | Notifications |
 | 23 | Magic Link → Resend | Notifications |
 | 24 | Dashboard stats | Dashboard |
