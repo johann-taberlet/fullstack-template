@@ -36,60 +36,95 @@ enum InvoiceStatus {
   CANCELLED
 }
 
-model user {
-  id            String    @id @default(cuid())
+// ─── Better Auth models ─────────────────────────────────
+
+model User {
+  id            String    @id
   name          String
-  email         String    @unique
+  email         String
   emailVerified Boolean   @default(false)
   image         String?
   role          String    @default("client")
-  banned        Boolean?
+  banned        Boolean?  @default(false)
   banReason     String?
   banExpires    DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  sessions      session[]
+  sessions      Session[]
+  accounts      Account[]
   clientProfile ClientProfile?
   ownedProjects Project[]     @relation("ProjectOwner")
   assignedTasks Task[]        @relation("TaskAssignee")
   createdTasks  Task[]        @relation("TaskCreator")
   timeEntries   TimeEntry[]
   comments      Comment[]
+
+  @@unique([email])
+  @@map("user")
 }
 
-model session {
-  id        String   @id @default(cuid())
-  expiresAt DateTime
-  token     String   @unique
-  ipAddress String?
-  userAgent String?
-  userId    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Session {
+  id             String   @id
+  expiresAt      DateTime
+  token          String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  ipAddress      String?
+  userAgent      String?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  impersonatedBy String?
 
-  user user @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
 }
 
-model verification {
-  id         String   @id @default(cuid())
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
   identifier String
   value      String
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
 }
 
+// ─── Application models ─────────────────────────────────
+
 model ClientProfile {
-  id      String  @id @default(cuid())
-  userId  String  @unique
-  company String?
-  phone   String?
-  address String?
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  company   String?
+  phone     String?
+  address   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user     user           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   projects ProjectClient[]
   invoices Invoice[]
 }
@@ -108,7 +143,7 @@ model Project {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  owner    user            @relation("ProjectOwner", fields: [ownerId], references: [id])
+  owner    User            @relation("ProjectOwner", fields: [ownerId], references: [id])
   clients  ProjectClient[]
   tasks    Task[]
   time     TimeEntry[]
@@ -117,7 +152,7 @@ model Project {
 }
 
 model ProjectClient {
-  id              String @id @default(cuid())
+  id              String   @id @default(cuid())
   projectId       String
   clientProfileId String
   createdAt       DateTime @default(now())
@@ -143,14 +178,14 @@ model Task {
   updatedAt   DateTime     @updatedAt
 
   project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignee  user?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  createdBy user        @relation("TaskCreator", fields: [createdById], references: [id])
+  assignee  User?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy User        @relation("TaskCreator", fields: [createdById], references: [id])
   time      TimeEntry[]
   comments  Comment[]
 }
 
 model TimeEntry {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   projectId   String
   taskId      String?
   userId      String
@@ -158,13 +193,13 @@ model TimeEntry {
   startTime   DateTime
   endTime     DateTime?
   duration    Int?
-  billable    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  billable    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task    Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  user    user    @relation(fields: [userId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
 }
 
 model Invoice {
@@ -187,7 +222,7 @@ model Invoice {
 }
 
 model InvoiceItem {
-  id          String @id @default(cuid())
+  id          String   @id @default(cuid())
   invoiceId   String
   description String
   quantity    Float
@@ -209,5 +244,5 @@ model Comment {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   task    Task?   @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  user    user    @relation(fields: [userId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
 }
